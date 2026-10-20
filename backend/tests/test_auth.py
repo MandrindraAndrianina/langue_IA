@@ -222,6 +222,4 @@ class TestHachageMotDePasse:
 
         assert utilisateur.mot_de_passe != INSCRIPTION["mot_de_passe"]
         assert utilisateur.mot_de_passe.startswith("$2b$")
-        assert bcrypt.checkpw(
-            INSCRIPTION["mot_de_passe"].encode(), utilisateur.mot_de_passe.encode()
-        )
+        assert bcrypt.checkpw(INSCRIPTION["mot_de_passe"].encode(), utilisateur.mot_de_passe.encode())
