@@ -45,7 +45,7 @@ def lister_langues(
     db: DbSession,
     _admin: AdministrateurConnecte,
     pagination: Annotated[Pagination, Depends()],
-    search: Annotated[str | None, Query(description="Désignation ou code")] = None,
+    search: Annotated[str | None, Query(max_length=100, description="Désignation ou code")] = None,
 ) -> PageLangues:
     filtres = [contient(search, Langue.libelle, Langue.code)] if search and search.strip() else []
     total = db.scalar(select(func.count()).select_from(Langue).where(*filtres)) or 0

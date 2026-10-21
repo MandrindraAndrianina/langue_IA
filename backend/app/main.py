@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
 from app.core.config import get_settings
+from app.core.securite import EnTetesSecuriteMiddleware, FiltreCsrfMiddleware
 
 settings = get_settings()
 
@@ -18,10 +19,14 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    # Le jeton est envoyé en en-tête Authorization : l'API n'utilise pas de cookie, donc pas de
+    # requête « crédentialisée » intersite (défense CSRF).
+    allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
+app.add_middleware(FiltreCsrfMiddleware, origines_autorisees=settings.cors_origins)
+app.add_middleware(EnTetesSecuriteMiddleware)
 
 app.include_router(api_router)
 
