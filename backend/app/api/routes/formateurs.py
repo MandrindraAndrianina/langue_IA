@@ -44,7 +44,7 @@ def lister_formateurs(
     db: DbSession,
     _admin: AdministrateurConnecte,
     pagination: Annotated[Pagination, Depends()],
-    search: Annotated[str | None, Query(description="Nom, prénom ou e-mail")] = None,
+    search: Annotated[str | None, Query(max_length=100, description="Nom, prénom ou e-mail")] = None,
     statut: StatutUtilisateur | None = None,
 ) -> PageFormateurs:
     filtres = [Utilisateur.role == Role.FORMATEUR]

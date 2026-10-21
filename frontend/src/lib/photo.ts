@@ -22,10 +22,13 @@ export function validatePhoto(file: Pick<File, "type" | "size">): string | undef
 /**
  * Le backend renvoie un chemin (« /media/photos/7.jpg ») ou une URL complète :
  * un chemin est servi par le backend, on le préfixe donc par son adresse.
+ * Seuls un chemin absolu ou une URL http(s) sont acceptés : toute autre valeur
+ * (`javascript:`, `data:`, …) est ignorée pour éviter une injection dans `src`.
  */
 export function resoudreUrlPhoto(url: string | null | undefined): string | null {
   if (!url) return null;
-  return url.startsWith("/") ? `${API_URL}${url}` : url;
+  if (url.startsWith("/")) return `${API_URL}${url}`;
+  return /^https?:\/\//i.test(url) ? url : null;
 }
 
 /**

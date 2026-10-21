@@ -28,7 +28,7 @@ def lister_utilisateurs(
     db: DbSession,
     _admin: AdministrateurConnecte,
     pagination: Annotated[Pagination, Depends()],
-    search: Annotated[str | None, Query(description="Nom, prénom ou e-mail")] = None,
+    search: Annotated[str | None, Query(max_length=100, description="Nom, prénom ou e-mail")] = None,
     role: Role | None = None,
 ) -> PageUtilisateurs:
     filtres = []
