@@ -1,10 +1,21 @@
-"""Authentification : POST /auth/login, /auth/register, /auth/forgot-password, /auth/reset-password."""
+"""Authentification : POST /auth/login, /auth/register, /auth/forgot-password, /auth/reset-password.
 
+Sécurité du jeton de session (JWT HS256) : usage « acces » vs « reinitialisation », expiration,
+signature, et révocation d'une session quand le compte n'est plus actif.
+"""
+
+from datetime import UTC, datetime, timedelta
+
+import bcrypt
+from jose import jwt as jose_jwt
 from sqlalchemy import select
 
-from app.core.security import creer_jeton_acces, creer_jeton_reinitialisation
+from app.core.config import get_settings
+from app.core.security import USAGE_ACCES, creer_jeton_acces, creer_jeton_reinitialisation
 from app.models import Abonnement, Role, StatutAbonnement, StatutUtilisateur, Utilisateur
 from tests.conftest import MOT_DE_PASSE, creer_utilisateur
+
+RESSOURCE_PROTEGEE = "/api/v1/users/me"
 
 INSCRIPTION = {
     "prenom": "Rova",
@@ -128,3 +139,87 @@ class TestMotDePasseOublie:
         utilisateur = creer_utilisateur(db, role=Role.APPRENANT)
         jeton = creer_jeton_reinitialisation(utilisateur.id_user, utilisateur.mot_de_passe)
         assert client.get("/api/v1/users/me", headers={"Authorization": f"Bearer {jeton}"}).status_code == 401
+
+
+def _en_tete(jeton: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {jeton}"}
+
+
+def _jeton_signe(id_user: int, cle: str, usage: str = USAGE_ACCES, minutes: int = 10) -> str:
+    """Émet un jeton arbitraire (bonne ou mauvaise clé, usage quelconque) pour éprouver le serveur."""
+    settings = get_settings()
+    claims = {"sub": str(id_user), "usage": usage, "exp": datetime.now(UTC) + timedelta(minutes=minutes)}
+    return jose_jwt.encode(claims, cle, settings.algorithm)
+
+
+class TestSecuriteJeton:
+    """Le JWT est le cœur de la session : chaque défense est testée isolément."""
+
+    def test_le_jeton_de_connexion_ouvre_une_route_protegee(self, client, db):
+        creer_utilisateur(db)
+        jeton = connexion(client).json()["access_token"]
+
+        reponse = client.get(RESSOURCE_PROTEGEE, headers=_en_tete(jeton))
+
+        assert reponse.status_code == 200
+        assert reponse.json()["email"] == "rova@exemple.com"
+
+    def test_refuse_un_jeton_falsifie_ou_signe_d_une_autre_cle(self, client, db):
+        utilisateur = creer_utilisateur(db)
+        # Bonne structure, signature d'une autre clé : le serveur doit la rejeter
+        for jeton in (
+            _jeton_signe(utilisateur.id_user, "mauvaise-cle-secrete"),
+            f"{connexion(client).json()['access_token'][:-2]}xx",  # dernier octet modifié
+        ):
+            assert client.get(RESSOURCE_PROTEGEE, headers=_en_tete(jeton)).status_code == 401
+
+    def test_refuse_un_jeton_expire(self, client, db):
+        utilisateur = creer_utilisateur(db)
+        expire = _jeton_signe(utilisateur.id_user, get_settings().secret_key, minutes=-1)
+
+        assert client.get(RESSOURCE_PROTEGEE, headers=_en_tete(expire)).status_code == 401
+
+    def test_refuse_un_jeton_sans_usage_de_session(self, client, db):
+        utilisateur = creer_utilisateur(db)
+        reinitialisation = creer_jeton_reinitialisation(utilisateur.id_user, utilisateur.mot_de_passe)
+
+        assert client.get(RESSOURCE_PROTEGEE, headers=_en_tete(reinitialisation)).status_code == 401
+
+    def test_refuse_un_jeton_d_une_classe_inconnue(self, client, db):
+        utilisateur = creer_utilisateur(db)
+        etranger = jose_jwt.encode(
+            {"sub": str(utilisateur.id_user), "exp": datetime.now(UTC) + timedelta(minutes=10)},
+            get_settings().secret_key,
+            get_settings().algorithm,
+        )
+
+        assert client.get(RESSOURCE_PROTEGEE, headers=_en_tete(etranger)).status_code == 401
+
+    def test_revoque_une_session_quand_le_compte_est_desactive(self, client, db):
+        """Un JWT encore valide ne doit plus rien ouvrir une fois le compte désactivé (révocation serveur)."""
+        utilisateur = creer_utilisateur(db)
+        jeton = connexion(client).json()["access_token"]
+        assert client.get(RESSOURCE_PROTEGEE, headers=_en_tete(jeton)).status_code == 200
+
+        utilisateur.statut = StatutUtilisateur.INACTIF
+        db.commit()
+
+        assert client.get(RESSOURCE_PROTEGEE, headers=_en_tete(jeton)).status_code == 401
+
+    def test_refuse_une_connexion_sans_en_tete_authorization(self, client, db):
+        creer_utilisateur(db)
+
+        assert client.get(RESSOURCE_PROTEGEE).status_code == 401
+        assert client.get(RESSOURCE_PROTEGEE, headers={"Authorization": "Banana"}).status_code == 401
+
+
+class TestHachageMotDePasse:
+    """Le mot de passe n'est jamais stocké en clair : uniquement un hachage bcrypt vérifiable."""
+
+    def test_le_mot_de_passe_est_hache_en_bcrypt_et_retrouvable(self, client, db):
+        client.post("/api/v1/auth/register", json=INSCRIPTION)
+        utilisateur = db.scalar(select(Utilisateur).where(Utilisateur.email == "rova@exemple.com"))
+
+        assert utilisateur.mot_de_passe != INSCRIPTION["mot_de_passe"]
+        assert utilisateur.mot_de_passe.startswith("$2b$")
+        assert bcrypt.checkpw(INSCRIPTION["mot_de_passe"].encode(), utilisateur.mot_de_passe.encode())
