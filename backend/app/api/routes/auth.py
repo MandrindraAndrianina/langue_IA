@@ -3,10 +3,11 @@
 import calendar
 from datetime import date
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 
 from app.api.deps import DbSession
+from app.core.rate_limit import limiter_connexion
 from app.core.security import (
     USAGE_REINITIALISATION,
     creer_jeton_acces,
@@ -38,7 +39,7 @@ def _ajouter_mois(depart: date, mois: int) -> date:
     return date(annee, numero_mois, min(depart.day, calendar.monthrange(annee, numero_mois)[1]))
 
 
-@router.post("/login", response_model=TokenOut)
+@router.post("/login", response_model=TokenOut, dependencies=[Depends(limiter_connexion)])
 def login(donnees: LoginIn, db: DbSession) -> TokenOut:
     utilisateur = db.scalar(select(Utilisateur).where(Utilisateur.email == donnees.email))
     # Même réponse pour un e-mail inconnu et un mauvais mot de passe : ne pas révéler les comptes existants
