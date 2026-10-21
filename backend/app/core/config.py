@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     # Durée de validité du lien envoyé à un formateur créé par l'administrateur (3 jours)
     invitation_token_expire_minutes: int = 4320
 
+    # Limitation des tentatives de connexion (anti brute force) : N tentatives par IP sur une fenêtre
+    rate_limit_login_tentatives: int = 5
+    rate_limit_login_fenetre_secondes: int = 60
+
     # Origines autorisées (frontend), séparées par des virgules dans le .env
     backend_cors_origins: str = "http://localhost:3000"
     # Adresse du frontend, pour les liens envoyés par e-mail

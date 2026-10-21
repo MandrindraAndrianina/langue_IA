@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
 from app.core.database import SessionLocal, engine  # noqa: E402
+from app.core.rate_limit import limiteur_connexion  # noqa: E402
 from app.core.security import creer_jeton_acces, hacher_mot_de_passe  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Administrateur, Apprenant, Formateur, Role, StatutUtilisateur, Utilisateur  # noqa: E402
@@ -62,6 +63,7 @@ def base_vide(base_migree) -> Iterator[None]:
         connexion.execute(text(f"TRUNCATE {', '.join(tables)} RESTART IDENTITY CASCADE"))
     with SessionLocal() as db:
         charger_referentiel(db)
+    limiteur_connexion.reinitialiser()
     yield
 
 
