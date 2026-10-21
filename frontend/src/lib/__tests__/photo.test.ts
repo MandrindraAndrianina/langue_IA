@@ -29,7 +29,18 @@ describe("resoudreUrlPhoto", () => {
     expect(resoudreUrlPhoto("/media/photos/7.jpg")).toBe("http://localhost:8000/media/photos/7.jpg");
   });
 
-  it("garde une URL complète telle quelle", () => {
+  it("garde une URL http(s) complète telle quelle", () => {
     expect(resoudreUrlPhoto("https://cdn.exemple.com/7.jpg")).toBe("https://cdn.exemple.com/7.jpg");
+    expect(resoudreUrlPhoto("HTTP://cdn.exemple.com/7.jpg")).toBe("HTTP://cdn.exemple.com/7.jpg");
+  });
+
+  it("préfixe un chemin protocol-relative (donc reste sur le backend)", () => {
+    expect(resoudreUrlPhoto("//attaquant.exemple/7.jpg")).toBe("http://localhost:8000//attaquant.exemple/7.jpg");
+  });
+
+  it("ignore les schémas dangereux (javascript:, data:)", () => {
+    expect(resoudreUrlPhoto("javascript:alert(1)")).toBeNull();
+    expect(resoudreUrlPhoto("data:image/svg+xml,<svg/onload=alert(1)>")).toBeNull();
+    expect(resoudreUrlPhoto("vbscript:msgbox(1)")).toBeNull();
   });
 });
